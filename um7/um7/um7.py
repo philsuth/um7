@@ -111,7 +111,7 @@ class UM7array(object):
 
     def checkbuffer(self, numbytes):
         for i in self.sensors:
-            if i.serial.inWaiting > numbytes:
+            if i.serial.inWaiting() > numbytes:
                 i.serial.flushInput()
                 # print 'flushed!'
 
@@ -145,9 +145,9 @@ class UM7(object):
             self.statemask.update({i: float('NaN')})
         try:
             self.serial = serial.Serial(port, baudrate=baud, bytesize=8, parity='N', stopbits=1, timeout=0.1)  # Open serial device
-            print 'Successfully connected to %s UM7!' % self.name
             self.serial.flushInput()
             self.serial.write('$$$')
+            print 'Successfully connected to %s UM7!' % self.name
         except OSError:
             print 'Could not connect to %s UM7. Is it plugged in or being used by another program?' % self.name
 
@@ -209,7 +209,8 @@ class UM7(object):
         t = time.time()
         while True:
             count += 1
-            if self.serial.in_waiting > 0:
+            print self.serial.inWaiting()
+            if self.serial.inWaiting() > 0:
                 byte = self.serial.read(size=1)
                 if byte == 's':
                     byte2 = self.serial.read(size=1)
