@@ -76,6 +76,12 @@ class UM7array(object):
             self.updatestate(i)
             self.updatehistory()
 
+    def catchallsamples(self):
+        for i in self.sensors:
+            i.catchallsamples()
+            self.updatestate(i)
+            self.updatehistory()
+
     def updatestate(self, s):
         # self.state.update({'time': time.time() - self.t0})  # maybe mask other sensor states to avoid oversampling
         # for i in self.sensors:                              # also it lets you take more accurate time measurements
@@ -159,6 +165,24 @@ class UM7(object):
         if sample:
             self.updatestate(sample)
         return sample
+
+    def catchallsamples(self, timeout=0.2):
+        sample = {}  # Initialize empty dict for new samples
+        t0 = time.time()  # Initialize timeout timer
+        while time.time() - t0 < timeout:  # While elapsed time is less than timeout
+            [foundpacket, hasdata, startaddress, data, commandfailed] = self.readpacket()  # Read a packet
+            if foundpacket:  # If you got one
+                newsample = parsedatabatch(data, startaddress, self.name)  # extract data
+                if newsample:  # If it works
+                    sample.update(newsample)  # Update sample with new sample
+            if list(set(self.statevars)-set(sample.keys())) == ['time']:  # If we have a new data key for every
+                                                                            # var in statevar minus 'time'
+                break  # Then we have all new data and can move on
+        if list(set(self.statevars) - set(sample.keys())) != ['time']:  # In case we timed out before we caught every var we want
+            print 'Missed some vars!'
+        if sample:  # If we have any new data
+            self.updatestate(sample)  # Update the sensor state
+        return sample  # Return the sample
 
     def grabsample(self, datatype):
         """Function that flushes buffers and then requests and then waits for specific datatype. ONLY WORKS IF BROADCAST
