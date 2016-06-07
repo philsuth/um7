@@ -31,10 +31,10 @@ import sys
 class UM7array(object):
 
     def __init__(self, names, ports, statevars, baud=115200):
-        self.t0 = time.time()
-        self.state = {}
-        self.statemask = {}
-        self.sensors = []
+        self.t0 = time.time()  # Reference time
+        self.state = {}  # Dict that holds current state
+        self.statemask = {}  # dict of NaNs to mask out old data
+        self.sensors = []  # List of um7 objects in array
         for i in range(len(names)):
             svars = [j for j in statevars]
             s = UM7(names[i], ports[i], svars, baud)
@@ -46,6 +46,8 @@ class UM7array(object):
         for i in statevars:
             self.state.update({i: float('NaN')})
             self.statemask.update({i: float('NaN')})
+        print self.statevars
+        print self.state
 
     def __del__(self):
         for i in self.sensors:
