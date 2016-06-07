@@ -1,20 +1,4 @@
-"""Module to interface with CHR UM7 IMU.  Contains class that handles serial interface and communication. Currently only
-   captures processed accel, gyro, euler data.  Data broadcast rates must be set in CHR Serial Interface Program or other
-   library
-   Useful functions:
-        object.catchsample()
-            Catches and parses whatever data packets the sensor is broadcasting.  Updates the sensor object's internal
-            data state with the new data and adds a timestamp
-
-        object.grabsample(datatype)
-            ONLY WORKS IF BROADCAST RATES ARE SET TO 0. Specifically requests data types passed to function. Updates
-            sensor object's state and adds a timestamp
-
-        object.zerogyros()
-            zeros sensor's internal gyros
-
-        object.resetekf()
-            resets sensor's internal EKF
+"""Module to interface with CHR UM7 IMU
 
     Important Notes:
         Timestamps are based on OS time, not sensor's internal timer
@@ -32,7 +16,7 @@
 # Creates serial objects, contains functions to parse serial data
 
 #####################################################################
-# TODO: Broadcast Rate Settings
+# TODO: Broadcast Rate Settings, Optimize Data Collection
 #####################################################################
 
 
@@ -209,7 +193,6 @@ class UM7(object):
         t = time.time()
         while True:
             count += 1
-            print self.serial.inWaiting()
             if self.serial.inWaiting() > 0:
                 byte = self.serial.read(size=1)
                 if byte == 's':

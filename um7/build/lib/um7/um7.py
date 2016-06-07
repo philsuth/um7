@@ -209,7 +209,6 @@ class UM7(object):
         t = time.time()
         while True:
             count += 1
-            print self.serial.inWaiting()
             if self.serial.inWaiting() > 0:
                 byte = self.serial.read(size=1)
                 if byte == 's':
