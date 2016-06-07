@@ -1,20 +1,4 @@
-"""Module to interface with CHR UM7 IMU.  Contains class that handles serial interface and communication. Currently only
-   captures processed accel, gyro, euler data.  Data broadcast rates must be set in CHR Serial Interface Program or other
-   library
-   Useful functions:
-        object.catchsample()
-            Catches and parses whatever data packets the sensor is broadcasting.  Updates the sensor object's internal
-            data state with the new data and adds a timestamp
-
-        object.grabsample(datatype)
-            ONLY WORKS IF BROADCAST RATES ARE SET TO 0. Specifically requests data types passed to function. Updates
-            sensor object's state and adds a timestamp
-
-        object.zerogyros()
-            zeros sensor's internal gyros
-
-        object.resetekf()
-            resets sensor's internal EKF
+"""Module to interface with CHR UM7 IMU
 
     Important Notes:
         Timestamps are based on OS time, not sensor's internal timer
@@ -32,7 +16,7 @@
 # Creates serial objects, contains functions to parse serial data
 
 #####################################################################
-# TODO: Broadcast Rate Settings
+# TODO: Broadcast Rate Settings, Optimize Data Collection
 #####################################################################
 
 
@@ -113,7 +97,6 @@ class UM7array(object):
         for i in self.sensors:
             if i.serial.inWaiting() > numbytes:
                 i.serial.flushInput()
-                # print 'flushed!'
 
 
 class UM7(object):
@@ -139,7 +122,6 @@ class UM7(object):
         self.state = {}
         self.statemask = {}
         self.statevars = statevars
-        self.history = numpy.zeros(len(statevars))
         for i in statevars:
             self.state.update({i: float('NaN')})
             self.statemask.update({i: float('NaN')})
@@ -174,7 +156,6 @@ class UM7(object):
         sample = parsedatabatch(data, startaddress, self.name)
         if sample:
             self.updatestate(sample)
-            # self.updatehistory()
         return sample
 
     def grabsample(self, datatype):
@@ -196,7 +177,6 @@ class UM7(object):
             sample.update(parsedata(data, returnaddress, self.name))
         if sample:
             self.updatestate(sample)
-            # self.updatehistory()
         return sample
 
     def readpacket(self):
@@ -218,10 +198,7 @@ class UM7(object):
                         if byte3 == 'p':
                             foundpacket = 1
                             break
-            # else:
-            #     break
         if foundpacket == 0:
-            # raise StandardError([self.name])
             hasdata = 0
             commandfailed = 0
             startaddress = 0
@@ -321,12 +298,6 @@ class UM7(object):
         mask = {k: v for k, v in self.statemask.items()}
         mask.update(sample)
         self.state.update(mask)
-
-    def updatehistory(self):
-        state = numpy.array([])
-        for i in self.statevars:
-            state = numpy.append(state, self.state[i])
-        self.history = numpy.vstack((self.history, state))
 
 
 def parsedata(data, address, devicename):
