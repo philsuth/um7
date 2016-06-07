@@ -28,6 +28,7 @@ import numpy
 import sys
 
 
+#TEST COMMENT
 class UM7array(object):
 
     def __init__(self, names, ports, statevars, baud=115200):
