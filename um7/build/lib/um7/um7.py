@@ -62,10 +62,10 @@ class UM7array(object):
     def catchsample(self):
         for i in self.sensors:
             i.catchsample()
-            self.updatestate(i)
-            self.updatehistory()
+        self.updatestate()
+        self.updatehistory()
 
-    def catchallsamples(self): # How do we update state/history?!?!
+    def catchallsamples(self):  # How do we update state/history?!?!
         for i in self.sensors:
             i.catchallsamples()
             # self.updatestate(i)
