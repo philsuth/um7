@@ -63,16 +63,7 @@ class UM7array(object):
 
     def catchsample(self):
         for i in self.sensors:
-            try:
-                i.catchsample()
-            except StandardError as err:
-                print 'Device disconnected! (' + str(err[0]) + ')'
-                okaysensors = list(set(self.sensors).difference([i]))
-                for j in okaysensors:
-                    del j
-                del i
-                print 'Array closed.'
-                sys.exit(0)
+            i.catchsample()
             self.updatestate(i)
             self.updatehistory()
 
