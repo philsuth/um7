@@ -46,8 +46,6 @@ class UM7array(object):
         for i in statevars:
             self.state.update({i: float('NaN')})
             self.statemask.update({i: float('NaN')})
-        print self.statevars
-        print self.state
 
     def __del__(self):
         for i in self.sensors:
@@ -63,37 +61,32 @@ class UM7array(object):
 
     def catchsample(self):
         for i in self.sensors:
-            try:
-                i.catchsample()
-            except StandardError as err:
-                print 'Device disconnected! (' + str(err[0]) + ')'
-                okaysensors = list(set(self.sensors).difference([i]))
-                for j in okaysensors:
-                    del j
-                del i
-                print 'Array closed.'
-                sys.exit(0)
+            i.catchsample()
             self.updatestate(i)
             self.updatehistory()
 
-    def catchallsamples(self):
+    def catchallsamples(self): # How do we update state/history?!?!
         for i in self.sensors:
             i.catchallsamples()
-            self.updatestate(i)
-            self.updatehistory()
+            # self.updatestate(i)
+            # self.updatehistory()
+        self.updatestate()
+        self.updatehistory()
 
-    def updatestate(self, s):
-        # self.state.update({'time': time.time() - self.t0})  # maybe mask other sensor states to avoid oversampling
-        # for i in self.sensors:                              # also it lets you take more accurate time measurements
-        #     sensorstate = {k: v for k, v in i.state.items()}
-        #     sensorstate.pop('time')
-        #     self.state.update(sensorstate)
-        sensorstate = {k: v for k, v in s.state.items()}
-        sensorstate.pop('time')
-        mask = {k: v for k, v in self.statemask.items()}
-        mask.update(sensorstate)
-        mask.update({'time': time.time() - self.t0})
-        self.state.update(mask)
+    # def updatestate(self, s):
+        # sensorstate = {k: v for k, v in s.state.items()}
+        # sensorstate.pop('time')
+        # mask = {k: v for k, v in self.statemask.items()}
+        # mask.update(sensorstate)
+        # mask.update({'time': time.time() - self.t0})
+        # self.state.update(mask)
+
+    def updatestate(self):
+        self.state.update({'time': time.time() - self.t0})  # maybe mask other sensor states to avoid oversampling
+        for i in self.sensors:                              # also it lets you take more accurate time measurements
+            sensorstate = {k: v for k, v in i.state.items()}
+            sensorstate.pop('time')
+            self.state.update(sensorstate)
 
     def updatehistory(self):
         state = numpy.array([])
@@ -166,7 +159,7 @@ class UM7(object):
             self.updatestate(sample)
         return sample
 
-    def catchallsamples(self, timeout=0.2):
+    def catchallsamples(self, timeout=0.1):
         sample = {}  # Initialize empty dict for new samples
         t0 = time.time()  # Initialize timeout timer
         while time.time() - t0 < timeout:  # While elapsed time is less than timeout
