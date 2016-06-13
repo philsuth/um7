@@ -65,9 +65,9 @@ class UM7array(object):
         self.updatestate()
         self.updatehistory()
 
-    def catchallsamples(self):  # How do we update state/history?!?!
+    def catchallsamples(self, timeout=0.02):  # How do we update state/history?!?!
         for i in self.sensors:
-            i.catchallsamples()
+            i.catchallsamples(timeout=timeout)
             # self.updatestate(i)
             # self.updatehistory()
         self.updatestate()
@@ -159,7 +159,7 @@ class UM7(object):
             self.updatestate(sample)
         return sample
 
-    def catchallsamples(self, timeout=0.1):
+    def catchallsamples(self, timeout):
         sample = {}  # Initialize empty dict for new samples
         t0 = time.time()  # Initialize timeout timer
         while time.time() - t0 < timeout:  # While elapsed time is less than timeout
