@@ -1,25 +1,24 @@
 from um7 import UM7
 
-name1 = 'sensor1'
+name1 = 's'
 name2 = 'sensor2'
-port1 = '/dev/tty.RNBT-8C0B-RNI-SPP'
-port2 = '/dev/tty.RNBT-E341-RNI-SPP'
-# port = '/dev/tty.usbserial-A903AAV1'
+port1 = '/dev/ttyS0'
+statevars = ['health', 'roll', 'pitch', 'yaw', 'xaccel', 'yaccel', 'zaccel']
+statevars = ['roll', 'pitch', 'yaw', 'xgyroraw', 'ygyroraw', 'zgyroraw', 'xmag', 'ymag', 'zmag']
 
-# sensor1 = UM7(name1, port1)
-sensor2 = UM7(name2, port2)
-# sensors = [sensor1, sensor2]
-# sensors = [sensor1]
-sensors = [sensor2]
+sensor1 = UM7(name1, port1, statevars)
+sensors = [sensor1]
 for i in sensors:
-    i.zerogyros()
+    #i.factoryreset()
+    #i.zerogyros()
     i.resetekf()
+    i.setmagref()
+    i.sethome()
     i.settimer()
 
 while True:
-    # sensor.grabsample(['xaccel', 'yaccel', 'zaccel', 'xgyro', 'rollpitch', 'yaw'])
+    #sensor2.grabsample(['xaccel', 'yaccel', 'zaccel', 'xgyro', 'roll', 'pitch', 'yaw'])
     for i in sensors:
-        i.catchsample()
-        print i.state
-
-
+        #i.catchsample()
+        i.catchallsamples(0.5)
+        print('r= {:8.2f} p= {:8.2f} y= {:8.2f} {:8.2f} {:8.2f} {:8.2f}'.format(i.state['s roll'], i.state['s pitch'], i.state['s yaw'], i.state['s xmag'], i.state['s ymag'], i.state['s zmag']))

@@ -43,14 +43,14 @@ class UM7array(object):
         statevars = ['time'] + statevars
         self.statevars = statevars
         self.history = numpy.zeros(len(statevars))
-        for i in statevars:
-            self.state.update({i: float('NaN')})
-            self.statemask.update({i: float('NaN')})
+        #for i in statevars:
+        #    self.state.update({i: float('NaN')})
+        #    self.statemask.update({i: float('NaN')})
 
     def __del__(self):
         for i in self.sensors:
             i.serial.close()
-        print 'Array closed.'
+        print('Array closed.')
 
     def settimer(self):
         self.t0 = time.time()
@@ -125,15 +125,15 @@ class UM7(object):
         self.statemask = {}
         self.statevars = statevars
         for i in statevars:
-            self.state.update({i: float('NaN')})
-            self.statemask.update({i: float('NaN')})
+            self.state.update({i: 0})
+            self.statemask.update({i: 0})
         try:
             self.serial = serial.Serial(port, baudrate=baud, bytesize=8, parity='N', stopbits=1, timeout=0.1)  # Open serial device
             self.serial.flushInput()
-            self.serial.write('$$$')
-            print 'Successfully connected to %s UM7!' % self.name
+            self.serial.write(b'$$$')
+            print('Successfully connected to %s UM7!' % self.name)
         except OSError:
-            print 'Could not connect to %s UM7. Is it plugged in or being used by another program?' % self.name
+            print('Could not connect to %s UM7. Is it plugged in or being used by another program?' % self.name)
 
     def __del__(self):
         """Closes virtual com port
@@ -141,7 +141,7 @@ class UM7(object):
         :return: None
         """
         self.serial.close()
-        print '%s serial device closed' % self.name
+        print('%s serial device closed' % self.name)
 
     def __name__(self):
         return self.name
@@ -173,10 +173,13 @@ class UM7(object):
                                                                             # var in statevar minus 'time'
                 break  # Then we have all new data and can move on
         if list(set(self.statevars) - set(sample.keys())) != [self.name + ' time']:  # In case we timed out before we caught every var we want
-            print 'Missed some vars!'
+            #print('Missed some vars!')
+            pass
         if sample:  # If we have any new data
-            self.updatestate(sample)  # Update the sensor state
-        return sample  # Return the sample
+            sample.update({self.name + ' time': time.time() - self.t0})
+        #    self.updatestate(sample)  # Update the sensor state
+        self.state.update(sample)
+        return self.state  # Return the sample
 
     def grabsample(self, datatype):
         """Function that flushes buffers and then requests and then waits for specific datatype. ONLY WORKS IF BROADCAST
@@ -204,20 +207,25 @@ class UM7(object):
 
         :return: Parsed packet info
         """
+        #self.serial.flushInput()
         foundpacket = 0
         count = 0
         t = time.time()
         while True:
             count += 1
-            if self.serial.inWaiting() > 0:
+            #print(self.serial.inWaiting())
+            if self.serial.inWaiting() >= 3:
                 byte = self.serial.read(size=1)
-                if byte == 's':
+                if byte == b's':
                     byte2 = self.serial.read(size=1)
-                    if byte2 == 'n':
+                    if byte2 == b'n':
                         byte3 = self.serial.read(size=1)
-                        if byte3 == 'p':
+                        if byte3 == b'p':
                             foundpacket = 1
                             break
+                else:
+                    print(byte)
+                    pass
         if foundpacket == 0:
             hasdata = 0
             commandfailed = 0
@@ -225,16 +233,39 @@ class UM7(object):
             data = 0
         else:
             try:
-                ptbyte = bin(int(binascii.hexlify(self.serial.read(size=1)), 16))[2:]
-                ptbyte = ptbyte.zfill(8)
-                hasdata = int(ptbyte[0], 2)
-                numdatabytes = (int(ptbyte[2:6], 2))*4+4
-                commandfailed = int(ptbyte[7], 2)
-                startaddress = int(binascii.hexlify(self.serial.read(size=1)), 16)
+                pt = bytearray(self.serial.read(size=1))[0]
+                #print(bin(pt))
+                hasdata = pt & 0b10000000
+                isbatch = pt & 0b01000000
+                numdatabytes = ((pt & 0b00111100) >> 2) * 4
+                #print('numdatabytes={}'.format(numdatabytes))
+                commandfailed = pt & 0b00000001
+                if not isbatch:
+                    numdatabytes = 4
+
+                startaddress = bytearray(self.serial.read(size=1))[0]
+                #print('start={}'.format(startaddress))
+                while self.serial.inWaiting() < numdatabytes:
+                    pass
                 if hasdata:
-                    data = binascii.hexlify(self.serial.read(size=numdatabytes))
+                    data = bytearray(self.serial.read(size=numdatabytes))
                 else:
                     data = False
+                cs = bytearray(self.serial.read(size=2))
+                cs = struct.unpack('!h', cs)[0]
+                ocs = 0
+                ocs += ord('s')
+                ocs += ord('n')
+                ocs += ord('p')
+                ocs += pt
+                ocs += startaddress
+                if data:
+                    ocs += sum(data)
+                if ocs != cs:
+                    print(bin(pt))
+                    print('cs={:4x}, ocs={:4x}'.format(cs, ocs))
+                    print(data)
+                    raise ValueError
             except ValueError:
                 hasdata = 0
                 commandfailed = 0
@@ -274,19 +305,18 @@ class UM7(object):
 
         :return: True or False based on success of request
         """
-        print 'Zeroing ' + self.name + ' gyros...'
-        self.serial.write('F,1\n')
-        self.request('zerogyros')
+        print('Zeroing ' + self.name + ' gyros...')
+        self.serial.write(b'F,1\n')
         timeout = time.time() + 0.5
         while time.time() < timeout:
             self.request('zerogyros')
             [foundpacket, hasdata, startaddress, data, commandfailed] = self.readpacket()
             if startaddress == name2hex_reg['zerogyros'] and commandfailed == 0:
-                print 'Successfully zeroed gyros.'
+                print('Successfully zeroed gyros.')
                 return True
             if self.serial.inWaiting() > 500:
                 self.serial.flushInput()
-        print 'Could not zero gyros.'
+        print('Could not zero gyros.')
         return False
 
     def resetekf(self):
@@ -294,35 +324,80 @@ class UM7(object):
 
         :return: True or False based on success of request
         """
-        print 'Resetting ' + self.name + ' EFK...'
-        self.serial.write('F,1\n')
-        self.request('resetekf')
+        print('Resetting ' + self.name + ' EFK...')
+        self.serial.write(b'F,1\n')
         timeout = time.time() + 0.5
         while time.time() < timeout:
             self.request('resetekf')
             [foundpacket, hasdata, startaddress, data, commandfailed] = self.readpacket()
             if startaddress == name2hex_reg['resetekf'] and commandfailed == 0:
-                print 'Successfully reset EKF.'
+                print('Successfully reset EKF.')
                 return True
             if self.serial.inWaiting() > 500:
                 self.serial.flushInput()
-        print 'Could not reset EKF.'
+        print('Could not reset EKF.')
+        return False
+
+    def factoryreset(self):
+        print('Resetting ' + self.name + ' MAG REF...')
+        self.serial.write(b'F,1\n')
+        timeout = time.time() + 0.5
+        while time.time() < timeout:
+            self.request('factoryreset')
+            [foundpacket, hasdata, startaddress, data, commandfailed] = self.readpacket()
+            if startaddress == name2hex_reg['factoryreset'] and commandfailed == 0:
+                print('Successfully reset EKF.')
+                return True
+            if self.serial.inWaiting() > 500:
+                self.serial.flushInput()
+        print('Could not reset EKF.')
+        return False
+
+    def setmagref(self):
+        print('Resetting ' + self.name + ' MAG REF...')
+        self.serial.write(b'F,1\n')
+        timeout = time.time() + 0.5
+        while time.time() < timeout:
+            self.request('setmagref')
+            [foundpacket, hasdata, startaddress, data, commandfailed] = self.readpacket()
+            if startaddress == name2hex_reg['setmagref'] and commandfailed == 0:
+                print('Successfully reset EKF.')
+                return True
+            if self.serial.inWaiting() > 500:
+                self.serial.flushInput()
+        print('Could not reset EKF.')
+        return False
+
+    def sethome(self):
+        print('Resetting ' + self.name + ' EFK...')
+        self.serial.write(b'F,1\n')
+        timeout = time.time() + 0.5
+        while time.time() < timeout:
+            self.request('sethome')
+            [foundpacket, hasdata, startaddress, data, commandfailed] = self.readpacket()
+            if startaddress == name2hex_reg['sethome'] and commandfailed == 0:
+                print('Successfully reset EKF.')
+                return True
+            if self.serial.inWaiting() > 500:
+                self.serial.flushInput()
+        print('Could not reset EKF.')
         return False
 
     def btstart(self):
         self.serial.flushInput()
         buff = 0
         while not buff:
-            self.serial.write('F,1\n')
+            self.serial.write(b'F,1\n')
             buff = self.serial.inWaiting()
-            print buff
+            print(buff)
             time.sleep(0.1)
 
     def updatestate(self, sample):
         sample.update({self.name + ' time': time.time() - self.t0})
-        todelete = list(set(sample.keys()).difference(self.state.keys()))
-        for i in todelete:
-            sample.pop(i)
+
+        #todelete = list(set(sample.keys()).difference(self.state.keys()))
+        #for i in todelete:
+        #    sample.pop(i)
         mask = {k: v for k, v in self.statemask.items()}
         mask.update(sample)
         self.state.update(mask)
@@ -387,48 +462,47 @@ def parsedatabatch(data, startaddress, devicename):
     xa = devicename + ' xaccel'
     ya = devicename + ' yaccel'
     za = devicename + ' zaccel'
+    xm = devicename + ' xmag'
+    ym = devicename + ' ymag'
+    zm = devicename + ' zmag'
     r = devicename + ' roll'
     p = devicename + ' pitch'
     y = devicename + ' yaw'
     rr = devicename + ' rollrate'
     pr = devicename + ' pitchrate'
     yr = devicename + ' yawrate'
+    rxg = devicename + ' xgyroraw'
+    ryg = devicename + ' ygyroraw'
+    rzg = devicename + ' zgyroraw'
     try:
-        if startaddress == 97:  # Processed Gyro Data
-            n = 8
-            datasplit = [data[i:i + n] for i
-                         in range(0, len(data), n)]  # Split data string into array of data bytes (n hex chars each)
-            del datasplit[-1]
-            for j in range(len(datasplit)):
-                datasplit[j] = struct.unpack('!f', datasplit[j].decode('hex'))[0]  # Convert hex string to IEEE 754 floating point
-            output = {xg: datasplit[0], yg: datasplit[1], zg: datasplit[2]}
-        elif startaddress == 101:  # Processed Accel Data:
-            n = 8
-            datasplit = [data[i:i + n] for i
-                         in range(0, len(data), n)]  # Split data string into array of data bytes (n hex chars each)
-            del datasplit[-1]
-            for j in range(len(datasplit)):
-                datasplit[j] = struct.unpack('!f', datasplit[j].decode('hex'))[0]  # Convert hex string to IEEE 754 floating point
-            output = {xa: datasplit[0], ya: datasplit[1], za: datasplit[2]}
+        if startaddress == 85:
+            # health
+            values = struct.unpack('!i', data)
+            output = { devicename + ' health': values[0] }
+        elif startaddress == 97:
+            # Processed Gyro Data: gyro xyzt, accel xyzt, mag xyzt
+            values = struct.unpack('!ffffffffffff', data)
+            output = {xg: values[0], yg: values[1], zg: values[2], xa: values[4], ya: values[5], za: values[6], xm: values[8], ym: values[9], zm: values[10]}
+        elif startaddress == 86:
+            # RAW: gyro xyz#t, accel xyz#t, mag xyz#t, temp ct, checksum
+            values=struct.unpack('!hhhhfhhhhfhhhhfff', data)
+            output = {rxg: values[0]/91.02222, ryg: values[1]/91.02222, rzg: values[2]/91.02222}
+        elif startaddress == 101:
+            # Processed Accel Data:
+            output = {}
         elif startaddress == 112:  # Processed Euler Data:
-            n = 4
-            datasplit = [data[i:i + n] for i
-                         in range(0, len(data), n)]  # Split data string into array of data bytes (n hex chars each)
-            del datasplit[9]
-            del datasplit[8]
-            del datasplit[7]
-            del datasplit[3]  # Delete unused data bytes
-            for j in range(len(datasplit)):
-                if j < len(datasplit) - 3:  # Euler angle bytes
-                    datasplit[j] = struct.unpack('!h', datasplit[j].decode('hex'))[0] / 91.02222  # Convert hex str to floating point
-                    # and convert using constant  # Euler angle rate bytes
-                else:
-                    datasplit[j] = struct.unpack('!h', datasplit[j].decode('hex'))[0] / 16.0  # Convert hex str to floating
-                    # point and convert using constant
-            output = {r: datasplit[0], p: datasplit[1], y: datasplit[2], rr: datasplit[3], yr: datasplit[4], pr: datasplit[5]}
+            values=struct.unpack('!hhhhhhhhf', data)
+            output = {r: values[0]/91.02222, p: values[1]/91.02222, y: values[2]/91.02222}
+        elif startaddress == 137:
+            #gyro bias xyz
+            values=struct.unpack('!fff', data)
+            output = {}
         else:
+            if data:
+                print('start=0x{:4x} len={:4d}'.format(startaddress, len(data)))
             return False
     except:
+        raise
         return False
     return output
 
@@ -444,7 +518,11 @@ name2hex_reg = {'health': 0x55,
                'yaw': 0x71,
                'rollpitchrate': 0x72,
                'yawrate': 0x73,
+                'factoryreset': 0xAC,
                 'zerogyros': 0xAD,
+                'sethome': 0xAE,
+                'factorycommit': 0xAF,
+                'setmagref': 0xB0,
                 'resetekf': 0xB3}
 
 dec2name_reg = {85: 'health',
