@@ -157,7 +157,7 @@ class UM7(object):
             return False
         sample = parsedatabatch(data, startaddress, self.name)
         if sample:
-            self.updatestate(sample)
+            self.state.update(sample)
         return sample
 
     def catchallsamples(self, timeout):
@@ -226,6 +226,8 @@ class UM7(object):
                 else:
                     print(byte)
                     pass
+            else:
+                time.sleep(0.01)
         if foundpacket == 0:
             hasdata = 0
             commandfailed = 0
@@ -287,6 +289,49 @@ class UM7(object):
         init.append(decimalchecksum1)
         init.append(decimalchecksum2)
         self.serial.write(init)
+
+    def readreg(self, start, length=0):
+        if length:
+            pt = 0b01000000
+            pt |= (length << 2)
+        else:
+            pt = 0x0
+        print(bin(pt), start, length)
+        ba = bytearray([ord('s'), ord('n'), ord('p'), pt, start])
+        cs = sum(ba)
+        ba += struct.pack('!h', cs)
+        print(ba)
+        print(len(ba))
+        self.serial.flushInput()
+        self.serial.write(ba)
+        while True:
+            foundpacket, hasdata, startaddress, data, commandfailed = self.readpacket()
+            if startaddress == start and commandfailed == False:
+                print(foundpacket, hasdata, startaddress, data, commandfailed)
+                return(data)
+                break
+
+    def writereg(self, start, length=0, data=None):
+        if data:
+            pt = 0b11000000
+            pt |= (length << 2)
+        else:
+            pt = 0x0
+        print(bin(pt), start, length)
+        ba = bytearray([ord('s'), ord('n'), ord('p'), pt, start])
+        if data:
+            ba += data
+        cs = sum(ba)
+        ba += struct.pack('!h', cs)
+        print(ba)
+        print(len(ba))
+        self.serial.flushInput()
+        self.serial.write(ba)
+        while True:
+            foundpacket, hasdata, startaddress, data, commandfailed = self.readpacket()
+            if startaddress == start and commandfailed == False:
+                break
+            #print(response)
 
     def settimer(self, t=False):
         """Resets internal UM7 class timer
@@ -465,15 +510,22 @@ def parsedatabatch(data, startaddress, devicename):
     xm = devicename + ' xmag'
     ym = devicename + ' ymag'
     zm = devicename + ' zmag'
+    rxm = devicename + ' xmagraw'
+    rym = devicename + ' ymagraw'
+    rzm = devicename + ' zmagraw'
     r = devicename + ' roll'
     p = devicename + ' pitch'
     y = devicename + ' yaw'
     rr = devicename + ' rollrate'
     pr = devicename + ' pitchrate'
     yr = devicename + ' yawrate'
+    rxa = devicename + ' xaccelraw'
+    rya = devicename + ' yaccelraw'
+    rza = devicename + ' zaccelraw'
     rxg = devicename + ' xgyroraw'
     ryg = devicename + ' ygyroraw'
     rzg = devicename + ' zgyroraw'
+    temp = devicename + ' temp'
     try:
         if startaddress == 85:
             # health
@@ -482,17 +534,23 @@ def parsedatabatch(data, startaddress, devicename):
         elif startaddress == 97:
             # Processed Gyro Data: gyro xyzt, accel xyzt, mag xyzt
             values = struct.unpack('!ffffffffffff', data)
-            output = {xg: values[0], yg: values[1], zg: values[2], xa: values[4], ya: values[5], za: values[6], xm: values[8], ym: values[9], zm: values[10]}
+            output = { xg: values[0], yg: values[1], zg: values[2],
+                       xa: values[4], ya: values[5], za: values[6],
+                       xm: values[8], ym: values[9], zm: values[10]}
         elif startaddress == 86:
             # RAW: gyro xyz#t, accel xyz#t, mag xyz#t, temp ct, checksum
             values=struct.unpack('!hhhhfhhhhfhhhhfff', data)
-            output = {rxg: values[0]/91.02222, ryg: values[1]/91.02222, rzg: values[2]/91.02222}
+            output = { rxg: values[0]/91.02222, ryg: values[1]/91.02222, rzg: values[2]/91.02222,
+                       rxa: values[5]/91.02222, rya: values[6]/91.02222, rza: values[7]/91.02222,
+                       rxm: values[10], rym: values[11], rzm: values[12],
+                       temp: values[15]}
         elif startaddress == 101:
             # Processed Accel Data:
             output = {}
         elif startaddress == 112:  # Processed Euler Data:
             values=struct.unpack('!hhhhhhhhf', data)
-            output = {r: values[0]/91.02222, p: values[1]/91.02222, y: values[2]/91.02222}
+            output = { r:  values[0]/91.02222, p:  values[1]/91.02222, y:  values[2]/91.02222,
+                       rr: values[4]/16.0,     pr: values[5]/16.0,     yr: values[6]/16.0 }
         elif startaddress == 137:
             #gyro bias xyz
             values=struct.unpack('!fff', data)
