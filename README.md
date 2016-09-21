@@ -1,6 +1,13 @@
 # UM7
 Python library to interface with CH Robotics UM7 IMU
 
+Provides a `class UM7` with the following methods:
+* `readreg(start, length=0)` to read register values
+* `writereg(start, length=0, data=None)` to write to registers
+* `readpacket()` to read and parse incoming packet data from the serial port
+* `catchsample()` to read and parse incoming data and update the internal `state` accoringly
+* `catchallsamples(timeout)` to catch all samples until all requested values are updated (will change in future)
+
 usage example:
 ```python
 import UM7
