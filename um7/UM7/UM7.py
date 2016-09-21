@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Module to interface with CHR UM7 IMU
 
     Important Notes:

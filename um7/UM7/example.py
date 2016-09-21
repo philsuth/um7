@@ -1,10 +1,10 @@
-import um7
+import UM7
 
 name1 = 's'
 port1 = '/dev/ttyS0'
 statevars = ['health', 'roll', 'pitch', 'yaw', 'xmag', 'ymag', 'zmag', 'xmagraw', 'ymagraw', 'zmagraw', 'xaccelraw', 'yaccelraw', 'zaccelraw', 'xaccel', 'yaccel', 'zaccel', 'xgyro', 'ygyro', 'zgyro']
 
-s1 = um7.UM7(name1, port1, statevars)
+s1 = UM7.UM7(name1, port1, statevars)
 
 print('GET_FW_REVISION=' +     s1.get_fw_revision())
 print('ZERO_GYROS ' + 'ok.' if s1.zero_gyros()      else 'failed.')
