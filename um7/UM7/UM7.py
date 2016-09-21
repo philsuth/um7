@@ -49,7 +49,7 @@ HEALTH_RES6  = 0x40
 HEALTH_RES7  = 0x80
 HEALTH_OVF   = 0x100
 
-class UM7Packet:
+class UM7Packet(object):
     def __init__(self, foundpacket, hasdata, startaddress, data, commandfailed):
         self.foundpacket = foundpacket
         self.hasdata = hasdata
@@ -60,7 +60,7 @@ class UM7Packet:
     def __init__(self, um7list):
         self.foundpacket, self.hasdata, self.startaddress, self.data, self.commandfailed = um7list
 
-class UM7:
+class UM7(object):
     """ Class that handles UM7 interfacing. Creates serial object for communication, contains functions to request specific
         data samples, catch any incoming data, check input buffer, and set various data broadcast rates. Currently only
         handles processed accel, gyro, and euler angle data.  Data is timed by OS.
