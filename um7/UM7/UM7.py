@@ -32,12 +32,16 @@ SET_MAG_REFERENCE = 0xB0 # (176)
 RESET_EKF         = 0xB3 # (179)
 
 DREG_HEALTH          = 0x55
-DREG_GYRO_PROC_X     = 0x61
 DREG_GYRO_RAW_XY     = 0x56
+DREG_GYRO_PROC_X     = 0x61
 DREG_ACCEL_PROC_X    = 0x65
 DREG_EULER_PHI_THETA = 0x70
 DREG_GYRO_BIAS_X     = 0x89
+
+CREG_COM_SETTINGS    = 0x00
 CREG_GYRO_TRIM_X     = 0x0C
+CREG_MAG_CAL1_1      = 0x0F
+CREG_MAG_BIAS_X      = 0x18
 
 HEALTH_GPS   = 0x1
 HEALTH_MAG   = 0x2
@@ -65,6 +69,7 @@ class UM7(object):
         data samples, catch any incoming data, check input buffer, and set various data broadcast rates. Currently only
         handles processed accel, gyro, and euler angle data.  Data is timed by OS.
     """
+    baud_rates = { 9600: 0, 14400: 1, 19200: 2, 38400: 3, 57600: 4, 115200: 5, 128000: 6, 153600: 7, 230400: 8, 256000: 9, 460800: 10, 921600: 11 }
 
     def __init__(self, name, port, statevars, baud=115200):
         """Create new UM7 serial object.
@@ -82,10 +87,7 @@ class UM7(object):
         for i in statevars:
             self.state.update({i: 0})
         try:
-            self.serial = serial.Serial(port, baudrate=baud, bytesize=8, parity='N', stopbits=1, timeout=0.1)  # Open serial device
-            self.serial.flushInput()
-            self.serial.write(b'$$$')
-            print('Connected to UM7 %s.' % self.name)
+            self.serial = serial.Serial(port, baudrate=baud, bytesize=8, parity='N', stopbits=1, timeout=0.1)
         except OSError:
             print('Could not connect to UM7 %s.' % self.name)
 
@@ -93,7 +95,6 @@ class UM7(object):
         """Closes virtual com port
         """
         self.serial.close()
-        print('%s serial device closed' % self.name)
 
     def __name__(self):
         return self.name
@@ -210,7 +211,6 @@ class UM7(object):
         ba = bytearray([ord('s'), ord('n'), ord('p'), pt, start])
         cs = sum(ba)
         ba += struct.pack('!h', cs)
-        self.serial.flushInput()
         self.serial.write(ba)
         while True:
             packet = self.readpacket()
@@ -219,7 +219,7 @@ class UM7(object):
                 return UM7Packet(packet)
         return False
 
-    def writereg(self, start, length=0, data=None):
+    def writereg(self, start, length=0, data=None, no_read=False):
         pt = 0x0
         if data:
             pt = 0b11000000
@@ -229,8 +229,10 @@ class UM7(object):
             ba += data
         cs = sum(ba)
         ba += struct.pack('!h', cs)
-        self.serial.flushInput()
         self.serial.write(ba)
+        if no_read:
+            self.serial.flush()
+            return True
         while True:
             packet = self.readpacket()
             foundpacket, hasdata, startaddress, data, commandfailed = packet
@@ -278,11 +280,30 @@ class UM7(object):
         p = self.writereg(SET_HOME_POSITION)
         return (not p.commandfailed)
 
+    def flash_commit(self):
+        p = self.writereg(FLASH_COMMIT)
+        return (not p.commandfailed)
+
     def get_fw_revision(self):
         p = self.readreg(GET_FW_REVISION)
         if p.commandfailed:
             return False
         return p.data.decode()
+
+    def set_baud_rate(self, baud):
+        new_baud = self.baud_rates[baud] << 28
+        p = self.readreg(CREG_COM_SETTINGS)
+        if p.commandfailed:
+            return False
+        cr = struct.unpack('!I', p.data)[0]
+        print('{:032b}'.format(cr))
+        cr &= 0x0fffffff
+        cr |= new_baud
+        print('{:032b}'.format(cr))
+        p = self.writereg(start=CREG_COM_SETTINGS, length=1, data=struct.pack('!I', new_baud), no_read=True)
+        if not p:
+            return False
+        self.serial.baudrate = baud
 
 def parsedatabatch(data, startaddress):
     xg   = 'xgyro'
