@@ -28,28 +28,31 @@ try:
 except AttributeError:
     from monotonic import monotonic
 
-GET_FW_REVISION   = 0xAA # (170)
-FLASH_COMMIT      = 0xAB # (171)
-RESET_TO_FACTORY  = 0xAC # (172)
-ZERO_GYROS        = 0xAD # (173)
-SET_HOME_POSITION = 0xAE # (174)
-SET_MAG_REFERENCE = 0xB0 # (176)
-RESET_EKF         = 0xB3 # (179)
+GET_FW_REVISION       = 0xAA # (170)
+FLASH_COMMIT          = 0xAB # (171)
+RESET_TO_FACTORY      = 0xAC # (172)
+ZERO_GYROS            = 0xAD # (173)
+SET_HOME_POSITION     = 0xAE # (174)
+SET_MAG_REFERENCE     = 0xB0 # (176)
+RESET_EKF             = 0xB3 # (179)
 
-DREG_HEALTH          = 0x55
-DREG_GYRO_RAW_XY     = 0x56
-DREG_GYRO_PROC_X     = 0x61
-DREG_ACCEL_PROC_X    = 0x65
-DREG_EULER_PHI_THETA = 0x70
-DREG_GYRO_BIAS_X     = 0x89
+DREG_HEALTH           = 0x55
+DREG_GYRO_RAW_XY      = 0x56
+DREG_GYRO_PROC_X      = 0x61
+DREG_ACCEL_PROC_X     = 0x65
+DREG_EULER_PHI_THETA  = 0x70
+DREG_GYRO_BIAS_X      = 0x89
 
-CREG_COM_SETTINGS    = 0x00
-CREG_GYRO_TRIM_X     = 0x0C
-CREG_MAG_CAL1_1      = 0x0F
-CREG_MAG_BIAS_X      = 0x18
+CREG_COM_SETTINGS     = 0x00
+CREG_GYRO_TRIM_X      = 0x0C
+CREG_MAG_CAL1_1       = 0x0F
+CREG_MAG_BIAS_X       = 0x18
 
-REG_HIDDEN           = 0xF000
-H_CREG_MAG_REF       = REG_HIDDEN | 0x7C
+REG_HIDDEN            = 0xF000
+H_CREG_GYRO_ALIGN1_1  = REG_HIDDEN | 0x31
+H_CREG_ACCEL_ALIGN1_1 = REG_HIDDEN | 0x52
+H_CREG_MAG_ALIGN1_1   = REG_HIDDEN | 0x73
+H_CREG_MAG_REF        = REG_HIDDEN | 0x7C
 
 HEALTH_GPS   = 0x1
 HEALTH_MAG   = 0x2
@@ -63,12 +66,15 @@ HEALTH_OVF   = 0x100
 
 class UM7Packet(object):
     def __init__(self, foundpacket=False, hasdata=False, startaddress=0x0, data=None, commandfailed=True, timeout=False):
-        self.foundpacket = foundpacket
-        self.hasdata = hasdata
+        self.foundpacket = bool(foundpacket)
+        self.hasdata = bool(hasdata)
         self.startaddress = startaddress
         self.data = data
-        self.commandfailed = commandfailed
-        self.timeout = timeout
+        self.commandfailed = bool(commandfailed)
+        self.timeout = bool(timeout)
+
+    def __str__(self):
+        return '{}(start=0x{:x}, found={}, failed={}, timeout={}, hasdata={})'.format(self.__class__.__name__, self.startaddress, self.foundpacket, self.commandfailed, self.timeout, self.hasdata)
 
 class UM7(object):
     """ Class that handles UM7 interfacing. Creates serial object for communication, contains functions to request specific
@@ -85,7 +91,6 @@ class UM7(object):
                name: name of object (str)
         """
         statevars[:] = [i for i in statevars]
-        statevars = ['time'] + statevars
         self.name = name
         self.t0 = monotonic()
         self.state = {}
@@ -106,7 +111,7 @@ class UM7(object):
 
     def catchsample(self):
         """Function that catches and parses incoming data, and then updates the sensor's state to include new data. Old
-        data in state is overwritten. Data is timed by OS
+        data in state is overwritten.
 
         :return: Newly obtained data, and updates internal sensor state
         """
@@ -118,26 +123,21 @@ class UM7(object):
             self.state.update(sample)
         return sample
 
-    def catchallsamples(self, timeout):
-        sample = {}  # Initialize empty dict for new samples
-        t0 = monotonic()  # Initialize timeout timer
-        while monotonic() - t0 < timeout:  # While elapsed time is less than timeout
-            packet = self.readpacket()  # Read a packet
-            if packet.foundpacket:  # If you got one
-                newsample = parsedatabatch(packet.data, packet.startaddress)  # extract data
-                if newsample:  # If it works
-                    sample.update(newsample)  # Update sample with new sample
-            if list(set(self.statevars)-set(sample.keys())) == ['time']:  # If we have a new data key for every
-                                                                            # var in statevar minus 'time'
-                break  # Then we have all new data and can move on
-        if list(set(self.statevars) - set(sample.keys())) != ['time']:  # In case we timed out before we caught every var we want
-            #print('Missed some vars!')
-            pass
-        if sample:  # If we have any new data
-            sample.update({'time': monotonic() - self.t0})
-        #    self.updatestate(sample)  # Update the sensor state
+    def catchallsamples(self, wanted_state, timeout):
+        sample = {}
+        t0 = monotonic()
+        all_found = False
+        while monotonic() - t0 < timeout:
+            packet = self.readpacket()
+            if packet.foundpacket:
+                newsample = parsedatabatch(packet.data, packet.startaddress)
+                if newsample:
+                    sample.update(newsample)
+            if all (k in sample for k in wanted_state): # all vars found
+                all_found = True
+                break
         self.state.update(sample)
-        return self.state  # Return the sample
+        return all_found
 
     def readpacket(self, timeout=0.1):
         """Scans for and partially parses new data packets. Binary data can then be sent to data parser
@@ -233,11 +233,15 @@ class UM7(object):
         return UM7Packet(startaddress=start, timeout=True)
 
     def writereg(self, start, length=0, data=None, timeout=0.1, no_read=False):
+        hidden = start & REG_HIDDEN
+        sa = start & 0xFF
         pt = 0x0
         if data:
             pt = 0b11000000
             pt |= (length << 2)
-        ba = bytearray([ord('s'), ord('n'), ord('p'), pt, start])
+        if hidden:
+            pt |= 0b00000010
+        ba = bytearray([ord('s'), ord('n'), ord('p'), pt, sa])
         if data:
             ba += data
         cs = sum(ba)
@@ -252,18 +256,6 @@ class UM7(object):
             if packet.startaddress == start:
                 return packet
         return UM7Packet(startaddress=start, timeout=True)
-
-    def settimer(self, t=False):
-        """Resets internal UM7 class timer
-
-        :param t: If given, sets class timer to t.  If not, all new data is timed relative to instant that settimer()
-        is called
-        :return:
-        """
-        if t:
-            self.t0 = t
-        else:
-            self.t0 = monotonic()
 
     def zero_gyros(self):
         """Sends request to zero gyros and waits for confirmation from sensor
@@ -319,45 +311,46 @@ class UM7(object):
         self.serial.baudrate = baud
 
 def parsedatabatch(data, startaddress):
-    gpx  = 'gyro_proc_x'
-    gpy  = 'gyro_proc_y'
-    gpz  = 'gyro_proc_z'
-    gpt  = 'gyro_proc_time'
-    grx  = 'gyro_raw_x'
-    gry  = 'gyro_raw_y'
-    grz  = 'gyro_raw_z'
-    grt  = 'gyro_raw_time'
-    apx  = 'accel_proc_x'
-    apy  = 'accel_proc_y'
-    apz  = 'accel_proc_z'
-    apt  = 'accel_proc_time'
-    arx  = 'accel_raw_x'
-    ary  = 'accel_raw_y'
-    arz  = 'accel_raw_z'
-    art  = 'accel_raw_time'
-    mpx  = 'mag_proc_x'
-    mpy  = 'mag_proc_y'
-    mpz  = 'mag_proc_z'
-    mpt  = 'mag_proc_time'
-    mrx  = 'mag_raw_x'
-    mry  = 'mag_raw_y'
-    mrz  = 'mag_raw_z'
-    mrt  = 'mag_raw_time'
-    r    = 'roll'
-    p    = 'pitch'
-    y    = 'yaw'
-    rr   = 'roll_rate'
-    pr   = 'pitch_rate'
-    yr   = 'yaw_rate'
-    et   = 'euler_time'
-    temp = 'temp'
+    health = 'health'
+    gpx    = 'gyro_proc_x'
+    gpy    = 'gyro_proc_y'
+    gpz    = 'gyro_proc_z'
+    gpt    = 'gyro_proc_time'
+    grx    = 'gyro_raw_x'
+    gry    = 'gyro_raw_y'
+    grz    = 'gyro_raw_z'
+    grt    = 'gyro_raw_time'
+    apx    = 'accel_proc_x'
+    apy    = 'accel_proc_y'
+    apz    = 'accel_proc_z'
+    apt    = 'accel_proc_time'
+    arx    = 'accel_raw_x'
+    ary    = 'accel_raw_y'
+    arz    = 'accel_raw_z'
+    art    = 'accel_raw_time'
+    mpx    = 'mag_proc_x'
+    mpy    = 'mag_proc_y'
+    mpz    = 'mag_proc_z'
+    mpt    = 'mag_proc_time'
+    mrx    = 'mag_raw_x'
+    mry    = 'mag_raw_y'
+    mrz    = 'mag_raw_z'
+    mrt    = 'mag_raw_time'
+    r      = 'roll'
+    p      = 'pitch'
+    y      = 'yaw'
+    rr     = 'roll_rate'
+    pr     = 'pitch_rate'
+    yr     = 'yaw_rate'
+    et     = 'euler_time'
+    temp   = 'temp'
     DD = 91.02222 # divider for degrees
     DR = 16.0     # divider for rate
     try:
         if startaddress == DREG_HEALTH:
             # (0x55,  85) Health register
             values = struct.unpack('!i', data)
-            output = { 'health': values[0] }
+            output = { health: values[0] }
         elif startaddress == DREG_GYRO_PROC_X:
             # (0x61,  97) Processed Data: gyro (deg/s) xyzt, accel (m/s²) xyzt, mag xyzt
             values = struct.unpack('!ffffffffffff', data)
