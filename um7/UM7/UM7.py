@@ -43,6 +43,9 @@ CREG_GYRO_TRIM_X     = 0x0C
 CREG_MAG_CAL1_1      = 0x0F
 CREG_MAG_BIAS_X      = 0x18
 
+REG_HIDDEN           = 0xF000
+H_CREG_MAG_REF       = REG_HIDDEN | 0x7C
+
 HEALTH_GPS   = 0x1
 HEALTH_MAG   = 0x2
 HEALTH_GYRO  = 0x4
@@ -54,15 +57,13 @@ HEALTH_RES7  = 0x80
 HEALTH_OVF   = 0x100
 
 class UM7Packet(object):
-    def __init__(self, foundpacket, hasdata, startaddress, data, commandfailed):
+    def __init__(self, foundpacket=False, hasdata=False, startaddress=0x0, data=None, commandfailed=True, timeout=False):
         self.foundpacket = foundpacket
         self.hasdata = hasdata
         self.startaddress = startaddress
         self.data = data
         self.commandfailed = commandfailed
-
-    def __init__(self, um7list):
-        self.foundpacket, self.hasdata, self.startaddress, self.data, self.commandfailed = um7list
+        self.timeout = timeout
 
 class UM7(object):
     """ Class that handles UM7 interfacing. Creates serial object for communication, contains functions to request specific
@@ -92,9 +93,8 @@ class UM7(object):
             print('Could not connect to UM7 %s.' % self.name)
 
     def __del__(self):
-        """Closes virtual com port
-        """
-        self.serial.close()
+        if self.serial:
+            self.serial.close()
 
     def __name__(self):
         return self.name
@@ -105,10 +105,10 @@ class UM7(object):
 
         :return: Newly obtained data, and updates internal sensor state
         """
-        [foundpacket, hasdata, startaddress, data, commandfailed] = self.readpacket()
-        if not foundpacket:
+        packet = self.readpacket()
+        if not packet.foundpacket:
             return False
-        sample = parsedatabatch(data, startaddress)
+        sample = parsedatabatch(packet.data, packet.startaddress)
         if sample:
             self.state.update(sample)
         return sample
@@ -117,9 +117,9 @@ class UM7(object):
         sample = {}  # Initialize empty dict for new samples
         t0 = time.time()  # Initialize timeout timer
         while time.time() - t0 < timeout:  # While elapsed time is less than timeout
-            [foundpacket, hasdata, startaddress, data, commandfailed] = self.readpacket()  # Read a packet
-            if foundpacket:  # If you got one
-                newsample = parsedatabatch(data, startaddress)  # extract data
+            packet = self.readpacket()  # Read a packet
+            if packet.foundpacket:  # If you got one
+                newsample = parsedatabatch(packet.data, packet.startaddress)  # extract data
                 if newsample:  # If it works
                     sample.update(newsample)  # Update sample with new sample
             if list(set(self.statevars)-set(sample.keys())) == ['time']:  # If we have a new data key for every
@@ -134,14 +134,14 @@ class UM7(object):
         self.state.update(sample)
         return self.state  # Return the sample
 
-    def readpacket(self):
+    def readpacket(self, timeout=0.1):
         """Scans for and partially parses new data packets. Binary data can then be sent to data parser
 
         :return: Parsed packet info
         """
         foundpacket = 0
-        t = time.time()
-        while True:
+        t0 = time.time()
+        while time.time() - t0 < timeout:  # While elapsed time is less than timeout
             if self.serial.inWaiting() >= 3:
                 byte = self.serial.read(size=1)
                 if byte == b's':
@@ -161,7 +161,9 @@ class UM7(object):
             commandfailed = 0
             startaddress = 0
             data = 0
+            timeout = 1
         else:
+            timeout = 0
             try:
                 pt = bytearray(self.serial.read(size=1))[0]
                 #print(bin(pt))
@@ -170,6 +172,7 @@ class UM7(object):
                 numdatabytes = ((pt & 0b00111100) >> 2) * 4
                 #print('numdatabytes={}'.format(numdatabytes))
                 commandfailed = pt & 0b00000001
+                hidden = pt & 0b00000010
                 if not isbatch:
                     numdatabytes = 4
 
@@ -191,6 +194,7 @@ class UM7(object):
                 ocs += startaddress
                 if data:
                     ocs += sum(data)
+                if hidden: startaddress |= REG_HIDDEN
                 if ocs != cs:
                     print(bin(pt))
                     print('cs={:4x}, ocs={:4x}'.format(cs, ocs))
@@ -201,25 +205,29 @@ class UM7(object):
                 commandfailed = 0
                 startaddress = 0
                 data = 0
-        return [foundpacket, hasdata, startaddress, data, commandfailed]
+        return UM7Packet(foundpacket, hasdata, startaddress, data, commandfailed, timeout)
 
-    def readreg(self, start, length=0):
+    def readreg(self, start, length=0, timeout=0.1):
+        hidden = start & REG_HIDDEN
+        sa = start & 0xFF
         pt = 0x0
         if length:
             pt = 0b01000000
             pt |= (length << 2)
-        ba = bytearray([ord('s'), ord('n'), ord('p'), pt, start])
+        if hidden:
+            pt |= 0b00000010
+        ba = bytearray([ord('s'), ord('n'), ord('p'), pt, sa])
         cs = sum(ba)
         ba += struct.pack('!h', cs)
         self.serial.write(ba)
-        while True:
+        t0 = time.time()
+        while time.time() - t0 < timeout:  # While elapsed time is less than timeout
             packet = self.readpacket()
-            foundpacket, hasdata, startaddress, data, commandfailed = packet
-            if startaddress == start:
-                return UM7Packet(packet)
-        return False
+            if packet.startaddress == start:
+                return packet
+        return UM7Packet(startaddress=start, timeout=True)
 
-    def writereg(self, start, length=0, data=None, no_read=False):
+    def writereg(self, start, length=0, data=None, timeout=0.1, no_read=False):
         pt = 0x0
         if data:
             pt = 0b11000000
@@ -232,13 +240,13 @@ class UM7(object):
         self.serial.write(ba)
         if no_read:
             self.serial.flush()
-            return True
-        while True:
+            return UM7Packet(startaddress=start)
+        t0 = time.time()
+        while time.time() - t0 < timeout:  # While elapsed time is less than timeout
             packet = self.readpacket()
-            foundpacket, hasdata, startaddress, data, commandfailed = packet
-            if startaddress == start:
-                return UM7Packet(packet)
-        return False
+            if packet.startaddress == start:
+                return packet
+        return UM7Packet(startaddress=start, timeout=True)
 
     def settimer(self, t=False):
         """Resets internal UM7 class timer
@@ -309,12 +317,15 @@ def parsedatabatch(data, startaddress):
     xg   = 'xgyro'
     yg   = 'ygyro'
     zg   = 'zgyro'
+    gt   = 'gyrotime'
     xa   = 'xaccel'
     ya   = 'yaccel'
     za   = 'zaccel'
+    at   = 'acceltime'
     xm   = 'xmag'
     ym   = 'ymag'
     zm   = 'zmag'
+    mt   = 'magtime'
     rxm  = 'xmagraw'
     rym  = 'ymagraw'
     rzm  = 'zmagraw'
@@ -340,9 +351,9 @@ def parsedatabatch(data, startaddress):
         elif startaddress == DREG_GYRO_PROC_X:
             # (0x61,  97) Processed Data: gyro (deg/s) xyzt, accel (m/s²) xyzt, mag xyzt
             values = struct.unpack('!ffffffffffff', data)
-            output = { xg: values[0], yg: values[1], zg: values[2],
-                       xa: values[4], ya: values[5], za: values[6],
-                       xm: values[8], ym: values[9], zm: values[10]}
+            output = { xg: values[0], yg: values[1], zg: values[ 2], gt: values[ 3],
+                       xa: values[4], ya: values[5], za: values[ 6], at: values[ 7],
+                       xm: values[8], ym: values[9], zm: values[10], mt: values[11]}
         elif startaddress == DREG_GYRO_RAW_XY:
             # (0x56,  86) Raw Rate Gyro Data: gyro xyz#t, accel xyz#t, mag xyz#t, temp ct
             values=struct.unpack('!hhh2xfhhh2xfhhh2xfff', data)
