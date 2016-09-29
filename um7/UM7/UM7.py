@@ -23,6 +23,11 @@ import struct
 import numpy
 import sys
 
+try:
+    monotonic = time.monotonic
+except AttributeError:
+    from monotonic import monotonic
+
 GET_FW_REVISION   = 0xAA # (170)
 FLASH_COMMIT      = 0xAB # (171)
 RESET_TO_FACTORY  = 0xAC # (172)
@@ -82,7 +87,7 @@ class UM7(object):
         statevars[:] = [i for i in statevars]
         statevars = ['time'] + statevars
         self.name = name
-        self.t0 = time.time()
+        self.t0 = monotonic()
         self.state = {}
         self.statevars = statevars
         for i in statevars:
@@ -115,8 +120,8 @@ class UM7(object):
 
     def catchallsamples(self, timeout):
         sample = {}  # Initialize empty dict for new samples
-        t0 = time.time()  # Initialize timeout timer
-        while time.time() - t0 < timeout:  # While elapsed time is less than timeout
+        t0 = monotonic()  # Initialize timeout timer
+        while monotonic() - t0 < timeout:  # While elapsed time is less than timeout
             packet = self.readpacket()  # Read a packet
             if packet.foundpacket:  # If you got one
                 newsample = parsedatabatch(packet.data, packet.startaddress)  # extract data
@@ -129,7 +134,7 @@ class UM7(object):
             #print('Missed some vars!')
             pass
         if sample:  # If we have any new data
-            sample.update({'time': time.time() - self.t0})
+            sample.update({'time': monotonic() - self.t0})
         #    self.updatestate(sample)  # Update the sensor state
         self.state.update(sample)
         return self.state  # Return the sample
@@ -140,8 +145,8 @@ class UM7(object):
         :return: Parsed packet info
         """
         foundpacket = 0
-        t0 = time.time()
-        while time.time() - t0 < timeout:  # While elapsed time is less than timeout
+        t0 = monotonic()
+        while monotonic() - t0 < timeout:  # While elapsed time is less than timeout
             if self.serial.inWaiting() >= 3:
                 byte = self.serial.read(size=1)
                 if byte == b's':
@@ -220,8 +225,8 @@ class UM7(object):
         cs = sum(ba)
         ba += struct.pack('!h', cs)
         self.serial.write(ba)
-        t0 = time.time()
-        while time.time() - t0 < timeout:  # While elapsed time is less than timeout
+        t0 = monotonic()
+        while monotonic() - t0 < timeout:  # While elapsed time is less than timeout
             packet = self.readpacket()
             if packet.startaddress == start:
                 return packet
@@ -241,8 +246,8 @@ class UM7(object):
         if no_read:
             self.serial.flush()
             return UM7Packet(startaddress=start)
-        t0 = time.time()
-        while time.time() - t0 < timeout:  # While elapsed time is less than timeout
+        t0 = monotonic()
+        while monotonic() - t0 < timeout:  # While elapsed time is less than timeout
             packet = self.readpacket()
             if packet.startaddress == start:
                 return packet
@@ -258,7 +263,7 @@ class UM7(object):
         if t:
             self.t0 = t
         else:
-            self.t0 = time.time()
+            self.t0 = monotonic()
 
     def zero_gyros(self):
         """Sends request to zero gyros and waits for confirmation from sensor
