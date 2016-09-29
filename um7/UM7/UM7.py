@@ -319,35 +319,40 @@ class UM7(object):
         self.serial.baudrate = baud
 
 def parsedatabatch(data, startaddress):
-    xg   = 'xgyro'
-    yg   = 'ygyro'
-    zg   = 'zgyro'
-    gt   = 'gyrotime'
-    xa   = 'xaccel'
-    ya   = 'yaccel'
-    za   = 'zaccel'
-    at   = 'acceltime'
-    xm   = 'xmag'
-    ym   = 'ymag'
-    zm   = 'zmag'
-    mt   = 'magtime'
-    rxm  = 'xmagraw'
-    rym  = 'ymagraw'
-    rzm  = 'zmagraw'
-    mrt  = 'magrawtime'
+    gpx  = 'gyro_proc_x'
+    gpy  = 'gyro_proc_y'
+    gpz  = 'gyro_proc_z'
+    gpt  = 'gyro_proc_time'
+    grx  = 'gyro_raw_x'
+    gry  = 'gyro_raw_y'
+    grz  = 'gyro_raw_z'
+    grt  = 'gyro_raw_time'
+    apx  = 'accel_proc_x'
+    apy  = 'accel_proc_y'
+    apz  = 'accel_proc_z'
+    apt  = 'accel_proc_time'
+    arx  = 'accel_raw_x'
+    ary  = 'accel_raw_y'
+    arz  = 'accel_raw_z'
+    art  = 'accel_raw_time'
+    mpx  = 'mag_proc_x'
+    mpy  = 'mag_proc_y'
+    mpz  = 'mag_proc_z'
+    mpt  = 'mag_proc_time'
+    mrx  = 'mag_raw_x'
+    mry  = 'mag_raw_y'
+    mrz  = 'mag_raw_z'
+    mrt  = 'mag_raw_time'
     r    = 'roll'
     p    = 'pitch'
     y    = 'yaw'
-    rr   = 'rollrate'
-    pr   = 'pitchrate'
-    yr   = 'yawrate'
-    rxa  = 'xaccelraw'
-    rya  = 'yaccelraw'
-    rza  = 'zaccelraw'
-    rxg  = 'xgyroraw'
-    ryg  = 'ygyroraw'
-    rzg  = 'zgyroraw'
+    rr   = 'roll_rate'
+    pr   = 'pitch_rate'
+    yr   = 'yaw_rate'
+    et   = 'euler_time'
     temp = 'temp'
+    DD = 91.02222 # divider for degrees
+    DR = 16.0     # divider for rate
     try:
         if startaddress == DREG_HEALTH:
             # (0x55,  85) Health register
@@ -356,31 +361,31 @@ def parsedatabatch(data, startaddress):
         elif startaddress == DREG_GYRO_PROC_X:
             # (0x61,  97) Processed Data: gyro (deg/s) xyzt, accel (m/s²) xyzt, mag xyzt
             values = struct.unpack('!ffffffffffff', data)
-            output = { xg: values[0], yg: values[1], zg: values[ 2], gt: values[ 3],
-                       xa: values[4], ya: values[5], za: values[ 6], at: values[ 7],
-                       xm: values[8], ym: values[9], zm: values[10], mt: values[11]}
+            output = { gpx: values[0], gpy: values[1], gpz: values[ 2], gpt: values[ 3],
+                       apx: values[4], apy: values[5], apz: values[ 6], apt: values[ 7],
+                       mpx: values[8], mpy: values[9], mpz: values[10], mpt: values[11]}
         elif startaddress == DREG_GYRO_RAW_XY:
             # (0x56,  86) Raw Rate Gyro Data: gyro xyz#t, accel xyz#t, mag xyz#t, temp ct
             values=struct.unpack('!hhh2xfhhh2xfhhh2xfff', data)
-            output = { rxg: values[0]/91.02222, ryg: values[1]/91.02222, rzg: values[2]/91.02222,
-                       rxa: values[4]/91.02222, rya: values[5]/91.02222, rza: values[6]/91.02222,
-                       rxm: values[8], rym: values[9], rzm: values[10], mrt: values[11],
+            output = { grx: values[0]/DD, gry: values[1]/DD, grz: values[ 2]/DD, grt: values[ 3],
+                       arx: values[4]/DD, ary: values[5]/DD, arz: values[ 6]/DD, art: values[ 7],
+                       mrx: values[8],    mry: values[9],    mrz: values[10],    mrt: values[11],
                        temp: values[12]}
         elif startaddress == DREG_ACCEL_PROC_X:
             # (0x65, 101) Processed Accel Data
             output = {}
         elif startaddress == DREG_EULER_PHI_THETA:
             # (0x70, 112) Processed Euler Data:
-            values=struct.unpack('!hhhhhhhhf', data)
-            output = { r:  values[0]/91.02222, p:  values[1]/91.02222, y:  values[2]/91.02222,
-                       rr: values[4]/16.0,     pr: values[5]/16.0,     yr: values[6]/16.0 }
+            values=struct.unpack('!hhh2xhhh2xf', data)
+            output = { r:  values[0]/DD, p:  values[1]/DD, y:  values[2]/DD,
+                       rr: values[3]/DR, pr: values[4]/DR, yr: values[5]/DR, et: values[6] }
         elif startaddress == DREG_GYRO_BIAS_X:
             # (0x89, 137) gyro bias xyz
-            values=struct.unpack('!fff', data)
+            # values=struct.unpack('!fff', data)
             output = {}
         elif startaddress == CREG_GYRO_TRIM_X:
             # (0x0C,  12)
-            values=struct.unpack('!fff', data)
+            # values=struct.unpack('!fff', data)
             output = {}
         else:
             if data:
