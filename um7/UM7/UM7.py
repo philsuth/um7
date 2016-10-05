@@ -201,9 +201,7 @@ class UM7(object):
                     ocs += sum(data)
                 if hidden: startaddress |= REG_HIDDEN
                 if ocs != cs:
-                    print(bin(pt))
-                    print('cs={:4x}, ocs={:4x}'.format(cs, ocs))
-                    print(data)
+                    print('bad checksum: {:4x} (should be: {:4x})'.format(cs, ocs))
                     raise ValueError
             except ValueError:
                 hasdata = 0
