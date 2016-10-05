@@ -4,7 +4,7 @@ name1 = 's'
 port1 = '/dev/ttyS0'
 statevars = ['health', 'roll', 'pitch', 'yaw', 'mag_proc_x', 'mag_proc_y', 'mag_proc_z', 'mag_raw_x', 'mag_raw_y', 'mag_raw_z', 'accel_raw_x', 'accel_raw_y', 'accel_raw_z', 'accel_proc_x', 'accel_proc_y', 'accel_proc_z', 'gyro_proc_x', 'gyro_proc_y', 'gyro_proc_z', 'accel_raw_time', 'accel_proc_time', 'euler_time']
 
-s1 = um7.UM7(name1, port1, statevars, baud=921600)
+s1 = um7.UM7(name1, port1, statevars, baud=115200)
 
 print('GET_FW_REVISION=' +     s1.get_fw_revision())
 print('ZERO_GYROS ' + 'ok.' if s1.zero_gyros()      else 'failed.')
