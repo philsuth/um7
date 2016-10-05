@@ -20,7 +20,6 @@ import serial
 import time
 import binascii
 import struct
-import numpy
 import sys
 
 try:
