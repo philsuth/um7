@@ -1,12 +1,12 @@
 from setuptools import setup
 
 setup(name='um7',
-      version='0.9',
-      description='Classes to interface with CH Robotics UM7 IMU',
-      url='https://pypi.python.org/pypi/um7/0.9',
-      author='Daniel Kurek',
-      author_email='dkurek93@gmail.com',
+      version='0.12',
+      description='Classes to interface with CH Robotics / Redshift Labs UM7 IMU',
+      url='https://github.com/buxit/um7',
+      author='Till Busch, Daniel Kurek',
+      author_email='till@bux.at',
       license='MIT',
       packages=['um7'],
-      install_requires=['pyserial', 'numpy'],
+      install_requires=['pyserial'],
       zip_safe=False)

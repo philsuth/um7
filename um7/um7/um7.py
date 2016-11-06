@@ -1,16 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Module to interface with CHR UM7 IMU
-
-    Important Notes:
-        Most functions return False if invalid data type is found
-        This module does not check incoming data checksums
-        Valid arguments for object.grabsample(datatype) can be found below
-
+"""Module to interface with CH Robotics / Redshift Labs UM7 IMU
 """
 
-# Till Busch <till@bux.at>
+# Copyright (c) 2016 by Till Busch <till@bux.at>
 # based on
 # Daniel Kurek, d'Arbeloff Lab, MIT, January, 2016
+# Published under MIT LICENSE
 # Module that holds UM7 class
 # Creates serial objects, contains functions to parse serial data
 
