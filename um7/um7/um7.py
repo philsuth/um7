@@ -38,6 +38,13 @@ DREG_EULER_PHI_THETA  = 0x70
 DREG_GYRO_BIAS_X      = 0x89
 
 CREG_COM_SETTINGS     = 0x00
+CREG_COM_RATES1       = 0x01
+CREG_COM_RATES2       = 0x02
+CREG_COM_RATES3       = 0x03
+CREG_COM_RATES4       = 0x04
+CREG_COM_RATES5       = 0x05
+CREG_COM_RATES6       = 0x06
+CREG_COM_RATES7       = 0x07
 CREG_GYRO_TRIM_X      = 0x0C
 CREG_MAG_CAL1_1       = 0x0F
 CREG_MAG_BIAS_X       = 0x18
@@ -84,6 +91,7 @@ class UM7(object):
         :param port: Virtual COM port to which the IMU is connected (str)
                name: name of object (str)
         """
+        super(UM7, self).__init__()
         statevars[:] = [i for i in statevars]
         self.name = name
         self.t0 = monotonic()
@@ -361,7 +369,12 @@ def parsedatabatch(data, startaddress):
             output = {}
         elif startaddress == DREG_EULER_PHI_THETA:
             # (0x70, 112) Processed Euler Data:
-            values=struct.unpack('!hhh2xhhh2xf', data)
+            fmt = '!hhh2xhhh2xf'
+
+            if len(data) == 36:
+                fmt += 'ffff'
+
+            values=struct.unpack(fmt, data)
             output = { r:  values[0]/DD, p:  values[1]/DD, y:  values[2]/DD,
                        rr: values[3]/DR, pr: values[4]/DR, yr: values[5]/DR, et: values[6] }
         elif startaddress == DREG_GYRO_BIAS_X:
