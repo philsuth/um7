@@ -361,7 +361,7 @@ def parsedatabatch(data, startaddress):
             # (0x56,  86) Raw Rate Gyro Data: gyro xyz#t, accel xyz#t, mag xyz#t, temp ct
             values=struct.unpack('!hhh2xfhhh2xfhhh2xfff', data)
             output = { grx: values[0]/DD, gry: values[1]/DD, grz: values[ 2]/DD, grt: values[ 3],
-                       arx: values[4]/DD, ary: values[5]/DD, arz: values[ 6]/DD, art: values[ 7],
+                       arx: values[4],    ary: values[5],    arz: values[ 6],    art: values[ 7],
                        mrx: values[8],    mry: values[9],    mrz: values[10],    mrt: values[11],
                        temp: values[12]}
         elif startaddress == DREG_ACCEL_PROC_X:
