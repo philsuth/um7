@@ -1,5 +1,5 @@
 # UM7
-Python library to interface with CH Robotics UM7 IMU
+Python library to interface with CH Robotics / Redshift Labs UM7 IMU
 
 Provides a `class UM7` with the following methods:
 * `readreg(start, length=0)` to read register values
