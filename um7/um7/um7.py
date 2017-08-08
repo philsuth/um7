@@ -34,6 +34,7 @@ DREG_HEALTH           = 0x55
 DREG_GYRO_RAW_XY      = 0x56
 DREG_GYRO_PROC_X      = 0x61
 DREG_ACCEL_PROC_X     = 0x65
+DREG_QUAT_AB          = 0x6D
 DREG_EULER_PHI_THETA  = 0x70
 DREG_GYRO_BIAS_X      = 0x89
 
@@ -343,9 +344,15 @@ def parsedatabatch(data, startaddress):
     pr     = 'pitch_rate'
     yr     = 'yaw_rate'
     et     = 'euler_time'
+    qa     = 'quat_a'
+    qb     = 'quat_b'
+    qc     = 'quat_c'
+    qd     = 'quat_d'
+    qt     = 'quat_time'
     temp   = 'temp'
     DD = 91.02222 # divider for degrees
     DR = 16.0     # divider for rate
+    DQ = 29789.09091 # divider for quaternion element
     try:
         if startaddress == DREG_HEALTH:
             # (0x55,  85) Health register
@@ -367,6 +374,11 @@ def parsedatabatch(data, startaddress):
         elif startaddress == DREG_ACCEL_PROC_X:
             # (0x65, 101) Processed Accel Data
             output = {}
+        elif startaddress == DREG_QUAT_AB:
+            # (0x6C, 108) Processed Quaternion Data
+            fmt = '!hhhhf'
+            values=struct.unpack(fmt, data)
+            output = { qa:  values[0]/DQ, qb:  values[1]/DQ, qc:  values[2]/DQ, qd:  values[3]/DQ, qt: values[4] }
         elif startaddress == DREG_EULER_PHI_THETA:
             # (0x70, 112) Processed Euler Data:
             fmt = '!hhh2xhhh2xf'
