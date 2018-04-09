@@ -87,7 +87,7 @@ class UM7(object):
 
     def __init__(self, name, port, statevars, baud=115200):
         """Create new UM7 serial object.
-        Defuault Baud Rate = 115200
+        Default Baud Rate = 115200
         Initializes port, name, OS timer, and sensor state (dict)
         :param port: Virtual COM port to which the IMU is connected (str)
                name: name of object (str)
@@ -121,7 +121,7 @@ class UM7(object):
         packet = self.readpacket()
         if not packet.foundpacket:
             return False
-        sample = parsedatabatch(packet.data, packet.startaddress)
+        sample = self.parsedatabatch(packet.data, packet.startaddress)
         if sample:
             self.state.update(sample)
         return sample
@@ -133,7 +133,7 @@ class UM7(object):
         while monotonic() - t0 < timeout:
             packet = self.readpacket()
             if packet.foundpacket:
-                newsample = parsedatabatch(packet.data, packet.startaddress)
+                newsample = self.parsedatabatch(packet.data, packet.startaddress)
                 if newsample:
                     sample.update(newsample)
             if all (k in sample for k in wanted_state): # all vars found
@@ -311,97 +311,98 @@ class UM7(object):
             return False
         self.serial.baudrate = baud
 
-def parsedatabatch(data, startaddress):
-    health = 'health'
-    gpx    = 'gyro_proc_x'
-    gpy    = 'gyro_proc_y'
-    gpz    = 'gyro_proc_z'
-    gpt    = 'gyro_proc_time'
-    grx    = 'gyro_raw_x'
-    gry    = 'gyro_raw_y'
-    grz    = 'gyro_raw_z'
-    grt    = 'gyro_raw_time'
-    apx    = 'accel_proc_x'
-    apy    = 'accel_proc_y'
-    apz    = 'accel_proc_z'
-    apt    = 'accel_proc_time'
-    arx    = 'accel_raw_x'
-    ary    = 'accel_raw_y'
-    arz    = 'accel_raw_z'
-    art    = 'accel_raw_time'
-    mpx    = 'mag_proc_x'
-    mpy    = 'mag_proc_y'
-    mpz    = 'mag_proc_z'
-    mpt    = 'mag_proc_time'
-    mrx    = 'mag_raw_x'
-    mry    = 'mag_raw_y'
-    mrz    = 'mag_raw_z'
-    mrt    = 'mag_raw_time'
-    r      = 'roll'
-    p      = 'pitch'
-    y      = 'yaw'
-    rr     = 'roll_rate'
-    pr     = 'pitch_rate'
-    yr     = 'yaw_rate'
-    et     = 'euler_time'
-    qa     = 'quat_a'
-    qb     = 'quat_b'
-    qc     = 'quat_c'
-    qd     = 'quat_d'
-    qt     = 'quat_time'
-    temp   = 'temp'
-    DD = 91.02222 # divider for degrees
-    DR = 16.0     # divider for rate
-    DQ = 29789.09091 # divider for quaternion element
-    try:
-        if startaddress == DREG_HEALTH:
-            # (0x55,  85) Health register
-            values = struct.unpack('!i', data)
-            output = { health: values[0] }
-        elif startaddress == DREG_GYRO_PROC_X:
-            # (0x61,  97) Processed Data: gyro (deg/s) xyzt, accel (m/s²) xyzt, mag xyzt
-            values = struct.unpack('!ffffffffffff', data)
-            output = { gpx: values[0], gpy: values[1], gpz: values[ 2], gpt: values[ 3],
-                       apx: values[4], apy: values[5], apz: values[ 6], apt: values[ 7],
-                       mpx: values[8], mpy: values[9], mpz: values[10], mpt: values[11]}
-        elif startaddress == DREG_GYRO_RAW_XY:
-            # (0x56,  86) Raw Rate Gyro Data: gyro xyz#t, accel xyz#t, mag xyz#t, temp ct
-            values=struct.unpack('!hhh2xfhhh2xfhhh2xfff', data)
-            output = { grx: values[0]/DD, gry: values[1]/DD, grz: values[ 2]/DD, grt: values[ 3],
-                       arx: values[4],    ary: values[5],    arz: values[ 6],    art: values[ 7],
-                       mrx: values[8],    mry: values[9],    mrz: values[10],    mrt: values[11],
-                       temp: values[12]}
-        elif startaddress == DREG_ACCEL_PROC_X:
-            # (0x65, 101) Processed Accel Data
-            output = {}
-        elif startaddress == DREG_QUAT_AB:
-            # (0x6C, 108) Processed Quaternion Data
-            fmt = '!hhhhf'
-            values=struct.unpack(fmt, data)
-            output = { qa:  values[0]/DQ, qb:  values[1]/DQ, qc:  values[2]/DQ, qd:  values[3]/DQ, qt: values[4] }
-        elif startaddress == DREG_EULER_PHI_THETA:
-            # (0x70, 112) Processed Euler Data:
-            fmt = '!hhh2xhhh2xf'
+    @staticmethod
+    def parsedatabatch(data, startaddress):
+        address = startaddress
+        offset = 0
+        output = {}
+        while offset < len(data):
+            rdata = UM7RegInfo.getdata(address)
+            if rdata is not None:
+                rformat, rnames, rscale = rdata
+                vals = struct.unpack(rformat, data[offset:offset+4])
+                if rscale is not None:
+                    vals = map(lambda x: x * rscale, vals)
+                output.update(zip(rnames, vals))
+            address += 1
+            offset += 4
+        return output
 
-            if len(data) == 36:
-                fmt += 'ffff'
 
-            values=struct.unpack(fmt, data)
-            output = { r:  values[0]/DD, p:  values[1]/DD, y:  values[2]/DD,
-                       rr: values[3]/DR, pr: values[4]/DR, yr: values[5]/DR, et: values[6] }
-        elif startaddress == DREG_GYRO_BIAS_X:
-            # (0x89, 137) gyro bias xyz
-            # values=struct.unpack('!fff', data)
-            output = {}
-        elif startaddress == CREG_GYRO_TRIM_X:
-            # (0x0C,  12)
-            # values=struct.unpack('!fff', data)
-            output = {}
+class UM7RegInfo(object):
+    """
+    Data class for UM7 registers
+    """
+    _degreescale = 1/91.02222         # scale factor for degrees
+    _ratescale = 1/16.0               # scale factor for rate
+    _quaternionscale = 1/29789.09091  # scale factor for quaternion element
+
+    # register data for UM7 reported registers between _regdatastart and _regdataend inclusive
+    # each register data element contains a unpack patter, list of register data names and an optional scale factor
+    _regdatastart = 0x55
+    _regdata = [('!i', ('health',), None),
+                ('!hh', ('gyro_raw_x', 'gyro_raw_y'), _degreescale),
+                ('!h2x', ('gyro_raw_z',), _degreescale),
+                ('!f', ('gyro_raw_time',), None),
+                ('!hh', ('accel_raw_x', 'accel_raw_y'), None),
+                ('!h2x', ('accel_raw_z',), None),
+                ('!f', ('accel_raw_time',), None),
+                ('!hh', ('mag_raw_x', 'mag_raw_y'), None),
+                ('!h2x', ('mag_raw_z',), None),
+                ('!f', ('mag_raw_time',), None),
+                ('!f', ('temp',), None),
+                ('!f', ('temp_time',), None),
+                ('!f', ('gyro_proc_x',), None),
+                ('!f', ('gyro_proc_y',), None),
+                ('!f', ('gyro_proc_z',), None),
+                ('!f', ('gyro_proc_time',), None),
+                ('!f', ('accel_proc_x',), None),
+                ('!f', ('accel_proc_y',), None),
+                ('!f', ('accel_proc_z',), None),
+                ('!f', ('accel_proc_time',), None),
+                ('!f', ('mag_proc_x',), None),
+                ('!f', ('mag_proc_y',), None),
+                ('!f', ('mag_proc_z',), None),
+                ('!f', ('mag_proc_time',), None),
+                ('!hh', ('quat_a', 'quat_b'), _quaternionscale),
+                ('!hh', ('quat_c', 'quat_d'), _quaternionscale),
+                ('!f', ('quat_time',), None),
+                ('!hh', ('roll', 'pitch'), _degreescale),
+                ('!h2x', ('yaw',), _degreescale),
+                ('!hh', ('roll_rate', 'pitch_rate'), _ratescale),
+                ('!h2x', ('yaw_rate',), _ratescale),
+                ('!f', ('euler_time',), None),
+                ('!f', ('position_n',), None),
+                ('!f', ('position_e',), None),
+                ('!f', ('position_up',), None),
+                ('!f', ('position_time',), None),
+                ('!f', ('velocity_n',), None),
+                ('!f', ('velocity_e',), None),
+                ('!f', ('velocity_up',), None),
+                ('!f', ('velocity_time',), None),
+                ('!f', ('gps_latitude',), None),
+                ('!f', ('gps_longitude',), None),
+                ('!f', ('gps_altitude',), None),
+                ('!f', ('gps_course',), None),
+                ('!f', ('gps_speed',), None),
+                ('!f', ('gps_time',), None),
+                ('!BbBb', ('gps_sat1_id', 'gps+sat1_snr', 'gps_sat2_id', 'gps_sat2_snr'), None),
+                ('!BbBb', ('gps_sat3_id', 'gps+sat3_snr', 'gps_sat4_id', 'gps_sat4_snr'), None),
+                ('!BbBb', ('gps_sat5_id', 'gps+sat5_snr', 'gps_sat6_id', 'gps_sat6_snr'), None),
+                ('!BbBb', ('gps_sat7_id', 'gps+sat7_snr', 'gps_sat8_id', 'gps_sat8_snr'), None),
+                ('!BbBb', ('gps_sat9_id', 'gps+sat9_snr', 'gps_sat10_id', 'gps_sat10_snr'), None),
+                ('!BbBb', ('gps_sat11_id', 'gps+sat11_snr', 'gps_sat12_id', 'gps_sat12_snr'), None),
+                ('!f', ('gyro_bias_x',), None),
+                ('!f', ('gyro_bias_y',), None),
+                ('!f', ('gyro_bias_z',), None)]
+    _regdataend = _regdatastart + len(_regdata)-1
+
+    @classmethod
+    def getdata(cls, regno):
+        if UM7RegInfo._regdatastart <= regno <= UM7RegInfo._regdataend:
+            return UM7RegInfo._regdata[regno-UM7RegInfo._regdatastart]
         else:
-            if data:
-                print('start=0x{:4x} len={:4d}'.format(startaddress, len(data)))
-            return False
-    except:
-        raise
-        return False
-    return output
+            return None
+
+
+
