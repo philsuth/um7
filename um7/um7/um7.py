@@ -54,7 +54,7 @@ CREG_MISC_SETTINGS    = 0x08
 CREG_MISC_SETTINGS_MAG= 0x01
 CREG_MISC_SETTINGS_Q  = 0x02
 CREG_MISC_SETTINGS_ZG = 0x04
-CREG_MISC_SETTINGS_PPS= 0x80
+CREG_MISC_SETTINGS_PPS= 0x100
 
 
 REG_HIDDEN            = 0xF000
@@ -308,6 +308,20 @@ class UM7(object):
         if p.commandfailed:
             return False
         return p.data.decode()
+
+    def set_misc(self, bit, val):
+        p = self.readreg(CREG_MISC_SETTINGS)
+        if p.commandfailed:
+            return False
+        cr = struct.unpack('!I', p.data)[0]
+        print('{:032b}'.format(cr))
+        if(val):
+            cr |= bit
+        else:
+            cr &= ~bit
+        print('{:032b}'.format(cr))
+        p = self.writereg(start=CREG_MISC_SETTINGS, length=1, data=struct.pack('!I', cr))
+        return (not p.commandfailed)
 
     def set_baud_rate(self, baud):
         new_baud = self.baud_rates[baud] << 28
