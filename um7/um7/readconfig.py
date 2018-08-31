@@ -14,6 +14,16 @@ p = sensor1.readreg(um7.CREG_MISC_SETTINGS, 1)
 cs = list(struct.unpack('!I', p.data))
 print('CREG_MISC_SETTINGS={:032b}'.format(cs[0]))
 
+p = sensor1.readreg(um7.CREG_ACCEL_BIAS_X, 3)
+bx, by, bz = struct.unpack('!fff', p.data)
+print('accel bias: {:9.2f} {:9.2f} {:9.2f}'.format(bx, by, bz))
+
+p = sensor1.readreg(um7.CREG_ACCEL_CAL1_1, 9)
+floats = struct.unpack('!fffffffff', p.data)
+old_m = np.array([floats[0:3],floats[3:6],floats[6:9]])
+print("accel cal matrix=")
+print(old_m)
+
 p = sensor1.readreg(um7.CREG_MAG_CAL1_1, 9)
 floats = struct.unpack('!fffffffff', p.data)
 old_m = np.array([floats[0:3],floats[3:6],floats[6:9]])
