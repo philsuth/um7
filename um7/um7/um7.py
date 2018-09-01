@@ -113,6 +113,7 @@ class UM7(object):
         self.t0 = monotonic()
         self.state = {}
         self.statevars = statevars
+        self.serial = None
         for i in statevars:
             self.state.update({i: 0})
         try:
@@ -229,6 +230,8 @@ class UM7(object):
         return UM7Packet(foundpacket, hasdata, startaddress, data, commandfailed, timeout)
 
     def readreg(self, start, length=0, timeout=0.1):
+        if not self.serial:
+            return UM7Packet(startaddress=start, timeout=True)
         hidden = start & REG_HIDDEN
         sa = start & 0xFF
         pt = 0x0
@@ -249,6 +252,8 @@ class UM7(object):
         return UM7Packet(startaddress=start, timeout=True)
 
     def writereg(self, start, length=0, data=None, timeout=0.1, no_read=False):
+        if not self.serial:
+            return UM7Packet(startaddress=start, timeout=True)
         hidden = start & REG_HIDDEN
         sa = start & 0xFF
         pt = 0x0
