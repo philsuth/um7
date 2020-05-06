@@ -193,6 +193,9 @@ class UM7(object):
                 else:
                     data = False
                 cs = bytearray(self.serial.read(size=2))
+                if len(cs) != 2:
+                    print('bad checksum read. len=%d', len(cs))
+                    raise ValueError
                 cs = struct.unpack('!h', cs)[0]
                 ocs = 0
                 ocs += ord('s')
@@ -206,11 +209,12 @@ class UM7(object):
                 if ocs != cs:
                     print('bad checksum: {:4x} (should be: {:4x})'.format(cs, ocs))
                     raise ValueError
-            except ValueError:
+            except [ValueError, TypeError, struct.error]:
                 hasdata = 0
                 commandfailed = 0
                 startaddress = 0
                 data = 0
+                foundpacket = 0
         return UM7Packet(foundpacket, hasdata, startaddress, data, commandfailed, timeout)
 
     def readreg(self, start, length=0, timeout=0.1):
@@ -316,16 +320,17 @@ class UM7(object):
         address = startaddress
         offset = 0
         output = {}
-        while offset < len(data):
-            rdata = UM7RegInfo.getdata(address)
-            if rdata is not None:
-                rformat, rnames, rscale = rdata
-                vals = struct.unpack(rformat, data[offset:offset+4])
-                if rscale is not None:
-                    vals = map(lambda x: x * rscale, vals)
-                output.update(zip(rnames, vals))
-            address += 1
-            offset += 4
+        if data:
+            while offset < len(data):
+                rdata = UM7RegInfo.getdata(address)
+                if rdata is not None:
+                    rformat, rnames, rscale = rdata
+                    vals = struct.unpack(rformat, data[offset:offset+4])
+                    if rscale is not None:
+                        vals = map(lambda x: x * rscale, vals)
+                    output.update(zip(rnames, vals))
+                address += 1
+                offset += 4
         return output
 
 
