@@ -49,8 +49,23 @@ CREG_COM_RATES7       = 0x07
 CREG_GYRO_TRIM_X      = 0x0C
 CREG_MAG_CAL1_1       = 0x0F
 CREG_MAG_BIAS_X       = 0x18
+CREG_ACCEL_CAL1_1     = 0x1B
+CREG_ACCEL_BIAS_X     = 0x24
+
+CREG_MISC_SETTINGS    = 0x08
+CREG_MISC_SETTINGS_MAG= 0x01
+CREG_MISC_SETTINGS_Q  = 0x02
+CREG_MISC_SETTINGS_ZG = 0x04
+CREG_MISC_SETTINGS_PPS= 0x100
+
 
 REG_HIDDEN            = 0xF000
+H_CREG_GYRO_VARIANCE  = REG_HIDDEN | 0x00
+H_CREG_ACCEL_VARIANCE = REG_HIDDEN | 0x01
+H_CREG_MAG_VARIANCE   = REG_HIDDEN | 0x02
+H_CREG_ACCEL_TAU      = REG_HIDDEN | 0x11
+H_CREG_GYRO_TAU       = REG_HIDDEN | 0x12
+H_CREG_MAG_TAU        = REG_HIDDEN | 0x13
 H_CREG_GYRO_ALIGN1_1  = REG_HIDDEN | 0x31
 H_CREG_ACCEL_ALIGN1_1 = REG_HIDDEN | 0x52
 H_CREG_MAG_ALIGN1_1   = REG_HIDDEN | 0x73
@@ -98,6 +113,7 @@ class UM7(object):
         self.t0 = monotonic()
         self.state = {}
         self.statevars = statevars
+        self.serial = None
         for i in statevars:
             self.state.update({i: 0})
         try:
@@ -218,6 +234,8 @@ class UM7(object):
         return UM7Packet(foundpacket, hasdata, startaddress, data, commandfailed, timeout)
 
     def readreg(self, start, length=0, timeout=0.1):
+        if not self.serial:
+            return UM7Packet(startaddress=start, timeout=True)
         hidden = start & REG_HIDDEN
         sa = start & 0xFF
         pt = 0x0
@@ -238,6 +256,8 @@ class UM7(object):
         return UM7Packet(startaddress=start, timeout=True)
 
     def writereg(self, start, length=0, data=None, timeout=0.1, no_read=False):
+        if not self.serial:
+            return UM7Packet(startaddress=start, timeout=True)
         hidden = start & REG_HIDDEN
         sa = start & 0xFF
         pt = 0x0
@@ -299,6 +319,20 @@ class UM7(object):
         if p.commandfailed:
             return False
         return p.data.decode()
+
+    def set_misc(self, bit, val):
+        p = self.readreg(CREG_MISC_SETTINGS)
+        if p.commandfailed:
+            return False
+        cr = struct.unpack('!I', p.data)[0]
+        print('{:032b}'.format(cr))
+        if(val):
+            cr |= bit
+        else:
+            cr &= ~bit
+        print('{:032b}'.format(cr))
+        p = self.writereg(start=CREG_MISC_SETTINGS, length=1, data=struct.pack('!I', cr))
+        return (not p.commandfailed)
 
     def set_baud_rate(self, baud):
         new_baud = self.baud_rates[baud] << 28
